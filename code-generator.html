@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>コード生成ツール</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      color: #1a1a2e;
+      text-align: center;
+    }
+
+    /* メッセージ */
+    #message {
+      display: none;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-align: center;
+    }
+    #message.success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; display: block; }
+    #message.error   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; display: block; }
+    #message.info    { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; display: block; }
+
+    /* カード */
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+
+    label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #374151;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      padding: 12px 14px;
+      border: 2px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color .2s;
+      -moz-appearance: textfield;
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+    input[type="number"]:focus { border-color: #6366f1; }
+
+    .btn-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    button {
+      padding: 13px 10px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+      line-height: 1.3;
+    }
+    button:active { transform: scale(.97); }
+    button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+    .btn-primary   { background: #6366f1; color: #fff; }
+    .btn-secondary { background: #10b981; color: #fff; }
+    .btn-danger    { background: #ef4444; color: #fff; }
+    .btn-gray      { background: #6b7280; color: #fff; }
+    .btn-outline   { background: #fff; color: #6366f1; border: 2px solid #6366f1; }
+
+    /* ステータス */
+    #status {
+      display: none;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      font-size: 0.9rem;
+      color: #1d4ed8;
+      line-height: 1.8;
+    }
+    #status.visible { display: block; }
+
+    /* 結果 */
+    #results-section { display: none; }
+    #results-section.visible { display: block; }
+
+    .results-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .results-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #374151;
+    }
+
+    .results-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .results-actions button {
+      padding: 8px 14px;
+      font-size: 0.85rem;
+    }
+
+    #results-list {
+      max-height: 420px;
+      overflow-y: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+    }
+
+    .result-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-bottom: 1px solid #f3f4f6;
+      gap: 8px;
+    }
+    .result-item:last-child { border-bottom: none; }
+    .result-item:nth-child(even) { background: #f9fafb; }
+
+    .result-url {
+      font-size: 0.85rem;
+      color: #1a1a2e;
+      word-break: break-all;
+      flex: 1;
+    }
+
+    .result-url a {
+      color: #4338ca;
+      text-decoration: none;
+      word-break: break-all;
+    }
+    .result-url a:hover { text-decoration: underline; }
+
+    .copy-one-btn {
+      flex-shrink: 0;
+      padding: 6px 12px;
+      font-size: 0.78rem;
+      background: #e0e7ff;
+      color: #4338ca;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background .15s;
+    }
+    .copy-one-btn:hover { background: #c7d2fe; }
+    .copy-one-btn:active { transform: scale(.96); }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>コード生成ツール</h1>
+
+  <div id="message"></div>
+
+  <div class="card">
+    <label for="count-input">生成件数（1〜10000）</label>
+    <input type="number" id="count-input" placeholder="例: 10" min="1" max="10000" inputmode="numeric">
+
+    <div class="btn-group">
+      <button class="btn-primary"   id="btn-normal"  onclick="generateNormally()">通常生成</button>
+      <button class="btn-secondary" id="btn-check"   onclick="generateWithExistenceCheck()">存在チェックして生成</button>
+      <button class="btn-danger"    id="btn-stop"    onclick="stopChecking()" disabled>チェック停止</button>
+      <button class="btn-gray"      id="btn-clear"   onclick="clearResults()">結果クリア</button>
+    </div>
+  </div>
+
+  <div id="status"></div>
+
+  <div id="results-section" class="card">
+    <div class="results-header">
+      <span class="results-title" id="results-title">結果</span>
+      <div class="results-actions">
+        <button class="btn-outline" onclick="copyAll()">全件コピー</button>
+        <button class="btn-gray"    onclick="downloadCsv()">CSVダウンロード</button>
+      </div>
+    </div>
+    <div id="results-list"></div>
+  </div>
+</div>
+
+<script>
+  /* ────────── 定数 ────────── */
+  const BASE_URL  = 'https://twimg.image-share.cc/';
+  const CHARS     = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const MAX_COUNT = 10000;
+
+  /* ────────── 状態 ────────── */
+  let generatedItems    = [];
+  let isChecking        = false;
+  let shouldStopChecking = false;
+
+  /* ────────── バリデーション ────────── */
+  function validateCount() {
+    const raw = document.getElementById('count-input').value.trim();
+    if (raw === '') { setMessage('件数を入力してください', 'error'); return null; }
+    if (!/^\d+$/.test(raw)) { setMessage('1以上の整数を入力してください', 'error'); return null; }
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 1) { setMessage('1以上の整数を入力してください', 'error'); return null; }
+    if (n > MAX_COUNT) { setMessage('10000件以下で入力してください', 'error'); return null; }
+    return n;
+  }
+
+  /* ────────── コード生成 ────────── */
+  function generateCode() {
+    let code = 'a';
+    for (let i = 0; i < 6; i++) {
+      code += CHARS[Math.floor(Math.random() * CHARS.length)];
+    }
+    return code;
+  }
+
+  function generateUniqueUrl(existingSet) {
+    let url;
+    let tries = 0;
+    do {
+      url = BASE_URL + generateCode();
+      tries++;
+      if (tries > 100000) break;
+    } while (existingSet.has(url));
+    return url;
+  }
+
+  /* ────────── 通常生成 ────────── */
+  function generateNormally() {
+    const count = validateCount();
+    if (count === null) return;
+
+    const existing = new Set(generatedItems);
+    const newItems = [];
+
+    for (let i = 0; i < count; i++) {
+      const url = generateUniqueUrl(new Set([...existing, ...newItems]));
+      newItems.push(url);
+    }
+
+    generatedItems = [...generatedItems, ...newItems];
+    renderResults();
+    setMessage(`${count}件生成しました`, 'success');
+  }
+
+  /* ────────── 存在チェック生成 ────────── */
+  const NOT_FOUND_PATTERNS = [
+    '404',
+    'ページが見つかりません',
+    'あちゃー！ページが見つかりません。',
+    'トップページに戻る',
+  ];
+
+  async function checkUrlExists(url) {
+    try {
+      const response = await fetch(url, { method: 'GET', cache: 'no-store' });
+      if (response.status === 404) return false;
+
+      // ボディを読んでソフト404を検出する
+      // CORSやネットワーク制限でボディ取得できない場合はステータス判定のみで続行
+      try {
+        const text = await response.text();
+        if (NOT_FOUND_PATTERNS.some(p => text.includes(p))) return false;
+      } catch {
+        // ボディ取得失敗 → ステータスが404でなかったので存在扱い
+      }
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function generateWithExistenceCheck() {
+    const count = validateCount();
+    if (count === null) return;
+    if (isChecking) return;
+
+    isChecking         = true;
+    shouldStopChecking = false;
+
+    setButtonState(true);
+    setMessage('存在チェックを開始しました...', 'info');
+
+    const maxAttempts = Math.max(count * 100, 1000);
+    const existing    = new Set(generatedItems);
+    const found       = [];
+    let   attempts    = 0;
+
+    while (found.length < count && attempts < maxAttempts) {
+      if (shouldStopChecking) break;
+
+      const url = generateUniqueUrl(new Set([...existing, ...found.map(u => u)]));
+      attempts++;
+
+      setStatus(`チェック中...\n試行: ${attempts}件\n発見: ${found.length}件`);
+
+      const exists = await checkUrlExists(url);
+      if (exists) {
+        found.push(url);
+        existing.add(url);
+      }
+    }
+
+    generatedItems = [...generatedItems, ...found];
+    renderResults();
+    isChecking = false;
+    setButtonState(false);
+    hideStatus();
+
+    if (shouldStopChecking) {
+      setMessage(`停止しました。発見: ${found.length}件`, 'info');
+    } else if (attempts >= maxAttempts && found.length < count) {
+      setMessage(`最大試行回数に到達しました。見つかった分だけ表示しています。（発見: ${found.length}件）`, 'info');
+    } else {
+      setMessage(`存在チェック完了。${found.length}件発見しました`, 'success');
+    }
+  }
+
+  /* ────────── 停止 ────────── */
+  function stopChecking() {
+    shouldStopChecking = true;
+  }
+
+  /* ────────── レンダリング ────────── */
+  function renderResults() {
+    const section = document.getElementById('results-section');
+    const list    = document.getElementById('results-list');
+    const title   = document.getElementById('results-title');
+
+    if (generatedItems.length === 0) {
+      section.classList.remove('visible');
+      return;
+    }
+
+    section.classList.add('visible');
+    title.textContent = `結果 ${generatedItems.length}件`;
+
+    list.innerHTML = generatedItems.map(url => `
+      <div class="result-item">
+        <span class="result-url">
+          <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>
+        </span>
+        <button class="copy-one-btn" onclick="copyText('${escapeHtml(url)}')">コピー</button>
+      </div>
+    `).join('');
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ────────── コピー ────────── */
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => setMessage('コピーしました', 'success'));
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setMessage('コピーしました', 'success');
+    }
+  }
+
+  function copyAll() {
+    if (generatedItems.length === 0) { setMessage('コピーする結果がありません', 'error'); return; }
+    copyText(generatedItems.join('\n'));
+  }
+
+  /* ────────── CSVダウンロード ────────── */
+  function downloadCsv() {
+    if (generatedItems.length === 0) { setMessage('ダウンロードする結果がありません', 'error'); return; }
+    const bom  = '﻿';
+    const rows = ['code', ...generatedItems].join('\n');
+    const blob = new Blob([bom + rows], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'generated-codes.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setMessage('CSVをダウンロードしました', 'success');
+  }
+
+  /* ────────── クリア ────────── */
+  function clearResults() {
+    generatedItems = [];
+    renderResults();
+    setMessage('結果をクリアしました', 'info');
+  }
+
+  /* ────────── UI ヘルパー ────────── */
+  let messageTimer = null;
+
+  function setMessage(text, type) {
+    const el = document.getElementById('message');
+    el.textContent = text;
+    el.className   = type;
+    if (messageTimer) clearTimeout(messageTimer);
+    if (type !== 'info' || !isChecking) {
+      messageTimer = setTimeout(() => { el.className = ''; el.style.display = 'none'; }, 4000);
+    }
+  }
+
+  function setStatus(text) {
+    const el = document.getElementById('status');
+    el.textContent = text;
+    el.classList.add('visible');
+    el.style.whiteSpace = 'pre-line';
+  }
+
+  function hideStatus() {
+    document.getElementById('status').classList.remove('visible');
+  }
+
+  function setButtonState(checking) {
+    document.getElementById('btn-normal').disabled = checking;
+    document.getElementById('btn-check').disabled  = checking;
+    document.getElementById('btn-stop').disabled   = !checking;
+    document.getElementById('btn-clear').disabled  = checking;
+  }
+
+  /* ────────── 入力欄: Enterキー ────────── */
+  document.getElementById('count-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') generateNormally();
+  });
+</script>
+</body>
+</html>
