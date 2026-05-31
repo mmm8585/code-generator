@@ -73,6 +73,36 @@
     input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
     input[type="number"]:focus { border-color: #6366f1; }
 
+    .concurrency-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .concurrency-row label {
+      margin: 0;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .concurrency-row select {
+      padding: 9px 10px;
+      border: 2px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      outline: none;
+      cursor: pointer;
+      background: #fff;
+      transition: border-color .2s;
+    }
+    .concurrency-row select:focus { border-color: #6366f1; }
+    .concurrency-note {
+      font-size: 0.78rem;
+      color: #9ca3af;
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+
     .btn-group {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -201,6 +231,17 @@
     <label for="count-input">生成件数（1〜10000）</label>
     <input type="number" id="count-input" placeholder="例: 10" min="1" max="10000" inputmode="numeric">
 
+    <div class="concurrency-row">
+      <label for="concurrency-select">同時チェック数</label>
+      <select id="concurrency-select">
+        <option value="5">5</option>
+        <option value="10" selected>10</option>
+        <option value="20">20</option>
+        <option value="50">50</option>
+      </select>
+    </div>
+    <p class="concurrency-note">⚠ 同時チェック数を上げすぎるとサーバー負荷が高まります。通常は 10 以下を推奨します。</p>
+
     <div class="btn-group">
       <button class="btn-primary"   id="btn-normal"  onclick="generateNormally()">通常生成</button>
       <button class="btn-secondary" id="btn-check"   onclick="generateWithExistenceCheck()">存在チェックして生成</button>
@@ -311,10 +352,18 @@
     }
   }
 
+  function buildStatusText(attempts, maxAttempts, found, count) {
+    const invalid = attempts - found;
+    const rate    = attempts > 0 ? ((found / attempts) * 100).toFixed(1) : '0.0';
+    return `チェック中...\n試行: ${attempts} / ${maxAttempts}件\n発見: ${found} / ${count}件\n無効: ${invalid}件\n成功率: ${rate}%`;
+  }
+
   async function generateWithExistenceCheck() {
     const count = validateCount();
     if (count === null) return;
     if (isChecking) return;
+
+    const concurrency = parseInt(document.getElementById('concurrency-select').value, 10);
 
     isChecking         = true;
     shouldStopChecking = false;
@@ -323,23 +372,37 @@
     setMessage('存在チェックを開始しました...', 'info');
 
     const maxAttempts = Math.max(count * 100, 1000);
-    const existing    = new Set(generatedItems);
+    const triedUrls   = new Set(generatedItems);
     const found       = [];
     let   attempts    = 0;
 
-    while (found.length < count && attempts < maxAttempts) {
-      if (shouldStopChecking) break;
+    while (found.length < count && attempts < maxAttempts && !shouldStopChecking) {
+      // このバッチで試行するURL数（残り試行数を超えない）
+      const batchSize = Math.min(concurrency, maxAttempts - attempts);
 
-      const url = generateUniqueUrl(new Set([...existing, ...found.map(u => u)]));
-      attempts++;
-
-      setStatus(`チェック中...\n試行: ${attempts}件\n発見: ${found.length}件`);
-
-      const exists = await checkUrlExists(url);
-      if (exists) {
-        found.push(url);
-        existing.add(url);
+      // バッチ内重複なしでURL生成
+      const batch = [];
+      for (let i = 0; i < batchSize; i++) {
+        const url = generateUniqueUrl(new Set([...triedUrls, ...batch]));
+        batch.push(url);
       }
+      batch.forEach(u => triedUrls.add(u));
+      attempts += batch.length;
+
+      setStatus(buildStatusText(attempts, maxAttempts, found.length, count));
+
+      // バッチを並列チェック
+      const results = await Promise.allSettled(
+        batch.map(url => checkUrlExists(url).then(exists => ({ url, exists })))
+      );
+
+      for (const r of results) {
+        if (r.status === 'fulfilled' && r.value.exists && found.length < count) {
+          found.push(r.value.url);
+        }
+      }
+
+      setStatus(buildStatusText(attempts, maxAttempts, found.length, count));
     }
 
     generatedItems = [...generatedItems, ...found];
