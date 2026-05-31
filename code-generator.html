@@ -325,31 +325,30 @@
   }
 
   /* ────────── 存在チェック生成 ────────── */
-  const NOT_FOUND_PATTERNS = [
-    '404',
-    'ページが見つかりません',
-    'あちゃー！ページが見つかりません。',
-    'トップページに戻る',
-  ];
+  // fetch は file:// からだと CORS でブロックされるため img タグで判定する。
+  // 画像として読み込めれば onload（存在する）、404やHTMLエラーページなら onerror（存在しない）。
+  function checkUrlExists(url) {
+    return new Promise((resolve) => {
+      const img  = new Image();
+      let settled = false;
 
-  async function checkUrlExists(url) {
-    try {
-      const response = await fetch(url, { method: 'GET', cache: 'no-store' });
-      if (response.status === 404) return false;
+      const done = (result) => {
+        if (settled) return;
+        settled = true;
+        img.onload = img.onerror = null;
+        img.src = '';
+        resolve(result);
+      };
 
-      // ボディを読んでソフト404を検出する
-      // CORSやネットワーク制限でボディ取得できない場合はステータス判定のみで続行
-      try {
-        const text = await response.text();
-        if (NOT_FOUND_PATTERNS.some(p => text.includes(p))) return false;
-      } catch {
-        // ボディ取得失敗 → ステータスが404でなかったので存在扱い
-      }
+      // 8秒以内に応答がなければ存在しない扱い
+      const timer = setTimeout(() => done(false), 8000);
 
-      return true;
-    } catch {
-      return false;
-    }
+      img.onload  = () => { clearTimeout(timer); done(true);  };
+      img.onerror = () => { clearTimeout(timer); done(false); };
+
+      // キャッシュを使わず毎回リクエストする
+      img.src = url + '?_=' + Date.now();
+    });
   }
 
   function buildStatusText(attempts, maxAttempts, found, count) {
